@@ -34,7 +34,7 @@ Example
      $ ./chainExplorer.py regtest 20
      ```
 
-4. Repeat step 1 to 3 with other mode (e.g. chain_nol)
+4. Repeat step 1 to 3 with other modes with mining to generate blocks
      ```
      $ ./chainExplorer.py nol 20
      ```
