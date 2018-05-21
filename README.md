@@ -18,5 +18,23 @@ Setup
 
 Example
 ====================
+1. Install and start bitcoind in regtest mode
 
-./chainExplorer.py nol 20
+     ```
+     $ bitcoind -regtest -daemon
+     ```
+
+2. Generate blocks with balance
+     ```
+     $ bitcoin-cli generate 101
+     ```
+
+3. Show blockchain headers
+     ```
+     $ ./chainExplorer.py regtest 20
+     ```
+
+4. Repeat step 1 to 3 with other mode (e.g. chain_nol)
+     ```
+     $ ./chainExplorer.py nol 20
+     ```
