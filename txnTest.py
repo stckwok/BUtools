@@ -25,6 +25,9 @@ PerfectFractions = True
 
 cnxn = None
 
+# 60sec/min * 10 min
+BLK_GENERATION_INTERVAL = 600
+
 def main(op, params=None):
   global cnxn
   cnxn = bitcoin.rpc.Proxy()
@@ -42,11 +45,14 @@ def main(op, params=None):
 
   addrs = [cnxn.getnewaddress(),cnxn.getnewaddress()]
   change = [cnxn.getrawchangeaddress()]
+
   #wallet = cnxn._call("listreceivedbyaddress")
   #wallet = cnxn._call("listunspent")
   if op=="unspent":
     wallet = cnxn.listunspent()
-    print ("This wallet has %d unspent outputs." % len(wallet))
+    if wallet:
+        print ("This wallet has %d unspent outputs." % len(wallet))
+        print ("\n Wallet has : " , str(wallet[0]))
 
   if op=="join":
     if len(params):
@@ -166,6 +172,7 @@ def main(op, params=None):
       j+=1
       if w['amount'] > nSplits*BTC:
         if 1: # try:
+          print("\n ... [w] = ", [w])
           split([w],addrs, cnxn, fee)
           print ("split %d satoshi into %d addrs fee %d %s" % (w['amount'],nSplits, fee, str(addrs)))
         else:  # :except bitcoin.rpc.JSONRPCError as e:
@@ -190,8 +197,12 @@ def generate(amt=1,cnxn=None):
 
 def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
   addr = addrp
+  print(">>>> Len off Address : ", len(addr))
   print ("SPAM")
   lastGenerate = -1
+  # init counters
+  total_interval = 0
+  payments_per_sec = []
   start = time.time()
   if amt == None:
     randAmt = True
@@ -201,7 +212,11 @@ def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
       end = time.time()
       interval = end - start
       start = end
-      print ("issued 256 payments in %f seconds.  %f payments/sec" % (interval, 256.0/interval))
+      total_interval += interval
+      #print("Total interval = ", total_interval)
+      current_pay_sec = 256.0/interval
+      print ("issued 256 payments in %f seconds.  %f payments/sec" % (interval, current_pay_sec))
+      payments_per_sec.append(current_pay_sec)
       if mempoolTarget:  # if the mempool is too big, wait for it to be reduced
         while True:
           mempoolData=bu._call("getmempoolinfo")
@@ -218,7 +233,15 @@ def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
       addr = addrp[i%len(addrp)]
     if randAmt:
       amt = random.randint(100*uBTC, BTC/2)
-    print ("Count ", i, "Send %d to %s" % (amt, str(addr)))
+    #print ("Count ", i, "Send %d to %s" % (amt, str(addr)))
+    if total_interval > BLK_GENERATION_INTERVAL:
+        print("\nPayment per second:")
+        print("Min : ", min(payments_per_sec))
+        print("Average : ", sum(payments_per_sec)/len(payments_per_sec))
+        print("Max : \n", max(payments_per_sec))
+        print("Total Txns in a block in 10 mins) : \n", sum(payments_per_sec))
+        del payments_per_sec[:]
+        total_interval = 0
     try:
       bu.sendtoaddress(addr,amt)
     except bitcoin.rpc.JSONRPCError as e:
@@ -282,6 +305,7 @@ def consolidate(frm, toAddr, cnxn, txfee=DEFAULT_TX_FEE):
   # pdb.set_trace()
   inp = []
   amount = Decimal(0)
+  print(" frm[0] = ", frm[0])
   for tx in frm:
       # pdb.set_trace()
       if tx["spendable"] is True and tx["confirmations"] > 0:
