@@ -33,6 +33,8 @@ cnxn = None
 # 60sec/min * 10 min
 BLK_GENERATION_INTERVAL = 600
 
+#op_lists = ["unspent", "join", "spamtill", "spam", "sweep", "split", "info"]
+
 def main(op, params=None):
   global cnxn
   print("Parameters : ", params)
@@ -41,15 +43,22 @@ def main(op, params=None):
 
   try:
     if params is not None and "localhost" in params:
-        print("Calling Local Proxy ....")
+        print("Local Proxy ...")
         cnxn = rpc.Proxy()
+    elif [True for txt in params if "ipaddress=" in txt]:
+        print("IP Address is input ...")
+        ip, port = find_params("ipaddress=", params)
+        #print(ip, port)
+        if validip(ip):
+            print("IP Address is validated ...")
+            cnxn = rpc.Proxy2("http://" + ip, port)
     elif validip(HOST_IP):
-        print("Calling  Local  Proxy2 ....")
+        print("Default IP Address and Port ...")
         cnxn = rpc.Proxy2("http://" + HOST_IP, HOST_PORT)  # Ub-test
   except ValueError as err:
-      print str(err)
-      #pdb.set_trace()
-      sys.exit(1)
+    print str(err)
+    #pdb.set_trace()
+    sys.exit(1)
 
   try:
     print (cnxn.getbalance())
@@ -78,7 +87,7 @@ def main(op, params=None):
       amt = int(params[0])
     else:
       amt = 100
-    if len(params)>1 and isLocalHost(params) is False:
+    if len(params)>2 and isLocalHost(params) is False and [True for txt in params if "ipaddress=" in txt] == []:
       repeat = int(params[1])
     else:
       repeat = 1
@@ -179,7 +188,7 @@ def main(op, params=None):
       nSplits = int(params[0])
     else:
       nSplits = 25
-    if len(params)>1 and isLocalHost(params) is False:
+    if len(params)>1 and isLocalHost(params) is False and [True for txt in params if "ipaddress=" in txt] == []:
       fee = int(params[1])
     else:
       fee = 9000
@@ -262,7 +271,10 @@ def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
         del payments_per_sec[:]
         total_interval = 0
     try:
-      bu.sendtoaddress(addr,amt)
+        if amt == 1234567:
+            bu.sendtoaddress(addr,amt)
+        else:
+            send_to_address(bu, addr, amt)
     except rpc.JSONRPCError as e:
       if "Fee is larger" in str(e) and randAmt:
         pass
@@ -279,6 +291,9 @@ def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
       #print
       pass
 
+@timeit
+def send_to_address(bu, addr, amt):
+    bu.sendtoaddress(addr,amt)
 
 def split(frm, toAddrs, cnxn, txfee=DEFAULT_TX_FEE):
   inp = []
@@ -345,10 +360,6 @@ def consolidate(frm, toAddr, cnxn, txfee=DEFAULT_TX_FEE):
     cnxn._call("sendrawtransaction", signedtxn["hex"])
 
 def consolidate2(frm, toAddr, cnxn):
-  #out = bitcoin.core.CTxOut(frm["amount"],toAddr)
-  #script = bitcoin.core.CScript()
-  # bitcoin.wallet.CBitcoinAddress(toAddr)
-
   inp = []
   for tx in frm["txids"]:
     txinfo = cnxn.gettransaction(tx)
@@ -373,9 +384,6 @@ def consolidate2(frm, toAddr, cnxn):
 
 def consolidate2(frm, toAddr, cnxn):
   pdb.set_trace()
-  #out = bitcoin.core.CTxOut(frm["amount"],toAddr)
-  #script = bitcoin.core.CScript()
-  # bitcoin.wallet.CBitcoinAddress(toAddr)
 
   inp = []
   for tx in frm["txids"]:
@@ -393,12 +401,6 @@ def consolidate2(frm, toAddr, cnxn):
   out = bitcoin.core.CMutableTxOut(frm["amount"],toAddr.to_scriptPubKey())
   txn = bitcoin.core.CMutableTransaction(inp,[out])
   cnxn.sendrawtransaction(txn)
-
-
-# python txnTest.py nol split
-#  645  python txnTest.py nol spam
-#  653  python txnTest.py nol unspent
-#  654  python txnTest.py nol join 100 1000
 
 if __name__ == "__main__":
   idx = 1
@@ -418,9 +420,13 @@ if __name__ == "__main__":
       print(" ")
       print(" User can input localhost at the end of the command lines to indicate bitcoind is runnning on the same machine")
       print(" Without localhost, it will send commands to remote host with HOST_IP and HOST_PORT defined")
+      print(" User can also specify host ip and port with ipaddress=10.xx.xx.xxx:yyyyy format")
       print("      example 1:  ./txnTest.py regtest unspent localhost")
       print("                  This wallet has 22372 unspent outputs.")
       print("      example 2:  ./txnTest.py regtest unspent")
+      print("                  hostname =  10.54.150.74")
+      print("                  This wallet has 411 unspent outputs.")
+      print("      example 3:  ./txnTest.py regtest unspent ipaddress=10.54.150.74:19011")
       print("                  hostname =  10.54.150.74")
       print("                  This wallet has 411 unspent outputs.")
       sys.exit(1)
