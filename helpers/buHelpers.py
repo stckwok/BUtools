@@ -8,6 +8,7 @@
 #!/usr/bin/env python2
 
 import time
+import subprocess
 
 def validip(ip):
     """Test if ip address is valid
@@ -69,3 +70,20 @@ def find_params(hostaddr, param_list):
     port = host[1]
     ip = host[0].split("=")[1]
     return ip, port
+
+def hostRunning(ip):
+    """Test if host is up and running using ping command
+    inputs
+        IP address to validate
+    returns
+        True if host is running (False otherwise)
+    """
+    try:
+      print(">>>> ping -c 1 " + ip)
+      output = subprocess.check_output("ping -c 1 " + ip, shell=True)
+      #print(output)
+    except Exception, e:
+      print(e)
+      return False
+
+    return True

@@ -13,8 +13,9 @@ import socket
 import random
 
 from helpers.buHelpers import *
+# Arbitrary IP supposed to be overwritten by user input
 HOST_IP = "10.54.150.74"
-#HOST_IP = "localhost"
+# RPC listening port for bitcoind config in bitcoin.conf
 HOST_PORT = 19011
 
 #bitcoin.SelectParams('testnet')
@@ -30,10 +31,15 @@ PerfectFractions = True
 
 cnxn = None
 
+# max number for spamTx
+MAX_TXN = 50000
 # 60sec/min * 10 min
 BLK_GENERATION_INTERVAL = 600
-
-#op_lists = ["unspent", "join", "spamtill", "spam", "sweep", "split", "info"]
+# number of simulated block generation
+COUNT = 3
+# pass/fail criteria
+# this depends on client speed of execution
+TARGET_PPS = 20
 
 def main(op, params=None):
   global cnxn
@@ -44,11 +50,18 @@ def main(op, params=None):
   try:
     if params is not None and "localhost" in params:
         print("Local Proxy ...")
-        cnxn = rpc.Proxy()
+        if (hostRunning("localhost")):
+          cnxn = rpc.Proxy()
+        else:
+          print("Host is not running ...")
+          sys.exit(1)
     elif [True for txt in params if "ipaddress=" in txt]:
         print("IP Address is input ...")
         ip, port = find_params("ipaddress=", params)
         #print(ip, port)
+        if (not hostRunning(ip)):
+          print("Remote Host is not running with IP = ", ip)
+          sys.exit(1)
         if validip(ip):
             print("IP Address is validated ...")
             cnxn = rpc.Proxy2("http://" + ip, port)
@@ -60,11 +73,6 @@ def main(op, params=None):
     #pdb.set_trace()
     sys.exit(1)
 
-  try:
-    print (cnxn.getbalance())
-  except ValueError as v:
-    print str(v)
-    pdb.set_trace()
   try:
     print (cnxn.getbalance())
   except ValueError as v:
@@ -126,7 +134,7 @@ def main(op, params=None):
     addrs = [cnxn.getnewaddress() for i in range(0,25)]
     while 1:
       try:
-        spamTx(cnxn,50000,addrs, amt,False,mempoolTarget=poolSize)
+        spamTx(cnxn, MAX_TXN ,addrs, amt,False,mempoolTarget=poolSize)
       except rpc.JSONRPCError as e:
         print ("Out of addresses.  Sleeping")
         time.sleep(60)
@@ -149,7 +157,7 @@ def main(op, params=None):
     addrs = [cnxn.getnewaddress() for i in range(0,25)]
     while 1:
       try:
-        spamTx(cnxn,50000,addrs, amt,False)
+        spamTx(cnxn, MAX_TXN, addrs, amt, False)
       except rpc.JSONRPCError as e:
         print ("Out of addresses.  Sleeping")
         time.sleep(60)
@@ -216,8 +224,6 @@ def main(op, params=None):
     txn = blk.vtx[0]
     print (txn.vin)
     print (txn.vout)
-  # cnxn.sendrawtransaction(txn)  # u'transaction already in block chain'  code: -27
-  #pdb.set_trace()
 
 def generate(amt=1,cnxn=None):
   if cnxn is None: cnxn = bu
@@ -225,12 +231,16 @@ def generate(amt=1,cnxn=None):
 
 def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
   addr = addrp
-  print(">>>> Len off Address : ", len(addr))
+  #print(">>>> Len off Address : ", len(addr))
   print ("SPAM")
   lastGenerate = -1
   # init counters
   total_interval = 0
+  runs = 0
   payments_per_sec = []
+  pps_min = []
+  pps_avg = []
+  pps_max = []
   start = time.time()
   if amt == None:
     randAmt = True
@@ -245,6 +255,7 @@ def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
       current_pay_sec = 256.0/interval
       print ("issued 256 payments in %f seconds.  %f payments/sec" % (interval, current_pay_sec))
       payments_per_sec.append(current_pay_sec)
+      #TODO: write to CSV
       if mempoolTarget:  # if the mempool is too big, wait for it to be reduced
         while True:
           mempoolData=bu._call("getmempoolinfo")
@@ -261,20 +272,47 @@ def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
       addr = addrp[i%len(addrp)]
     if randAmt:
       amt = random.randint(100*uBTC, BTC/2)
-    #print ("Count ", i, "Send %d to %s" % (amt, str(addr)))
+    #print ("Count ", i, "Send %d to %s" % (amt, str(addr)))  # too noisy
     if total_interval > BLK_GENERATION_INTERVAL:
+        blk_min = min(payments_per_sec)
+        blk_avg = sum(payments_per_sec)/len(payments_per_sec)
+        blk_max = max(payments_per_sec)
         print("\nPayment per second:")
-        print("Min : ", min(payments_per_sec))
-        print("Average : ", sum(payments_per_sec)/len(payments_per_sec))
-        print("Max : \n", max(payments_per_sec))
+        print("Min : ", blk_min)
+        print("Average : ", blk_avg)
+        print("Max : \n", blk_max)
         print("Total Txns in a block in 10 mins) : \n", sum(payments_per_sec))
         del payments_per_sec[:]
+        #total_interval = 0
+        pps_min.append(blk_min)
+        pps_avg.append(blk_avg)
+        pps_max.append(blk_max)
+        runs+=1
+        print("\n")
+        print(">>> Number of runs = ", runs)
+        generate(1, bu)
+        print ("Generated at count %d  Interval %d" % (runs, total_interval))
         total_interval = 0
+
+        if runs == COUNT:
+          runs = 0
+          print("\n>>> End of Mesaurement")
+          average = round( sum(pps_avg)/len(pps_avg) )
+          print(">>> pps_min = ", round( sum(pps_min)/len(pps_min)))
+          print(">>> pps_avg = ", round( sum(pps_avg)/len(pps_avg)))
+          print(">>> pps_max = ", round( sum(pps_max)/len(pps_max)))
+          time.sleep(3)
+          assert(average > TARGET_PPS)
+          print("Test passed!!!")
+          sys.exit(0)
     try:
         if amt == 1234567:
+            # payments/sec for 256 payments interval
             bu.sendtoaddress(addr,amt)
         else:
+            # with timeit decorator on each txn
             send_to_address(bu, addr, amt)
+            # TODO: can also write to CSV file (required for finest measurement)
     except rpc.JSONRPCError as e:
       if "Fee is larger" in str(e) and randAmt:
         pass
