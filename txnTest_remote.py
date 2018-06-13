@@ -122,10 +122,9 @@ def main(op, params=None):
       offset+=amt
       if offset > len(wallet): break
 
-  #wallet = cnxn.listunspent()
-  #addrs = [cnxn.getnewaddress() for i in range(0,10)]
-  #split([wallet[0]],addrs, cnxn)
   if op=="spamtill":
+    tps=None
+    iters=None
     if len(params):
       poolSize = int(params[0])
     else:
@@ -134,7 +133,7 @@ def main(op, params=None):
     addrs = [cnxn.getnewaddress() for i in range(0,25)]
     while 1:
       try:
-        spamTx(cnxn, MAX_TXN ,addrs, amt,False,mempoolTarget=poolSize)
+        spamTx(cnxn, MAX_TXN ,addrs, tps, iters, amt, False, mempoolTarget=poolSize)
       except rpc.JSONRPCError as e:
         print ("Out of addresses.  Sleeping")
         time.sleep(60)
@@ -150,14 +149,22 @@ def main(op, params=None):
             pass
 
   if op=="spam":
+    # set to default first
+    tps = TARGET_PPS
+    iters = COUNT
     if len(params):
       amt = int(params[0])
     else:
       amt = None
+    # user can over write the defaults
+    if len(params)>2 and "tps" in params[2]:
+      tps = int(params[2].split("=")[1])
+    if len(params)>3 and "iters" in params[3]:
+      iters = int(params[3].split("=")[1])
     addrs = [cnxn.getnewaddress() for i in range(0,25)]
     while 1:
       try:
-        spamTx(cnxn, MAX_TXN, addrs, amt, False)
+        spamTx(cnxn, MAX_TXN, addrs, tps, iters, amt, False)
       except rpc.JSONRPCError as e:
         print ("Out of addresses.  Sleeping")
         time.sleep(60)
@@ -229,10 +236,12 @@ def generate(amt=1,cnxn=None):
   if cnxn is None: cnxn = bu
   cnxn._call("generate",amt)
 
-def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
+def spamTx(bu, numTx, addrp, tps, iters, amt = None,gen=False, mempoolTarget=None):
   addr = addrp
   #print(">>>> Len off Address : ", len(addr))
-  print ("SPAM")
+  print("SPAM")
+  print(">> TPS = ", tps)
+  print(">> COUNT = ", iters)
   lastGenerate = -1
   # init counters
   total_interval = 0
@@ -294,7 +303,7 @@ def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
         print ("Generated at count %d  Interval %d" % (runs, total_interval))
         total_interval = 0
 
-        if runs == COUNT:
+        if iters is not None and runs == iters:
           runs = 0
           print("\n>>> End of Mesaurement")
           average = round( sum(pps_avg)/len(pps_avg) )
@@ -302,7 +311,9 @@ def spamTx(bu, numTx,addrp,amt = None,gen=False, mempoolTarget=None):
           print(">>> pps_avg = ", round( sum(pps_avg)/len(pps_avg)))
           print(">>> pps_max = ", round( sum(pps_max)/len(pps_max)))
           time.sleep(3)
-          assert(average > TARGET_PPS)
+          #assert(average > TARGET_PPS)
+          if tps is not None:
+            assert(average > tps)
           print("Test passed!!!")
           sys.exit(0)
     try:
@@ -459,14 +470,20 @@ if __name__ == "__main__":
       print(" User can input localhost at the end of the command lines to indicate bitcoind is runnning on the same machine")
       print(" Without localhost, it will send commands to remote host with HOST_IP and HOST_PORT defined")
       print(" User can also specify host ip and port with ipaddress=10.xx.xx.xxx:yyyyy format")
-      print("      example 1:  ./txnTest.py regtest unspent localhost")
+      print("      example 1:  ./txnTest_remote.py regtest unspent localhost")
       print("                  This wallet has 22372 unspent outputs.")
-      print("      example 2:  ./txnTest.py regtest unspent")
+      print("      example 2:  ./txnTest_remote.py regtest unspent")
       print("                  hostname =  10.54.150.74")
       print("                  This wallet has 411 unspent outputs.")
-      print("      example 3:  ./txnTest.py regtest unspent ipaddress=10.54.150.74:19011")
+      print("      example 3:  ./txnTest_remote.py regtest unspent ipaddress=10.54.150.74:19011")
       print("                  hostname =  10.54.150.74")
       print("                  This wallet has 411 unspent outputs.")
+      print("                                                      ")
+      print(' To set pass/fail criteria in payment/sec for the "spam" command, use "tps=value" option to overwrite default value of 20')
+      print("      example 5:  ./txnTest_remote.py regtest spam 1234567 localhost tps=5")
+      print("                                                      ")
+      print(' To set number of iterations (in 10mins) for "spam" command, use "iters=value" option to overwrite default value of 3')
+      print("      example 6:  ./txnTest_remote.py regtest spam 1234567 localhost tps=5 iters=2")
       sys.exit(1)
     if sys.argv[idx] == "testnet":
       bitcoin.SelectParams('testnet')
