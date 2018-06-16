@@ -12,6 +12,8 @@ import httplib
 import socket
 import random
 
+import os
+from datetime import datetime
 from helpers.buHelpers import *
 # Arbitrary IP supposed to be overwritten by user input
 HOST_IP = "10.54.150.74"
@@ -40,6 +42,8 @@ COUNT = 3
 # pass/fail criteria
 # this depends on client speed of execution
 TARGET_PPS = 20
+# default csv file name
+PPS_STATS_FILE = "pps_stat.csv"
 
 def main(op, params=None):
   global cnxn
@@ -125,6 +129,7 @@ def main(op, params=None):
   if op=="spamtill":
     tps=None
     iters=None
+    clientname=None
     if len(params):
       poolSize = int(params[0])
     else:
@@ -133,7 +138,7 @@ def main(op, params=None):
     addrs = [cnxn.getnewaddress() for i in range(0,25)]
     while 1:
       try:
-        spamTx(cnxn, MAX_TXN ,addrs, tps, iters, amt, False, mempoolTarget=poolSize)
+        spamTx(cnxn, MAX_TXN ,addrs, tps, iters, clientname, amt, False, mempoolTarget=poolSize)
       except rpc.JSONRPCError as e:
         print ("Out of addresses.  Sleeping")
         time.sleep(60)
@@ -161,10 +166,12 @@ def main(op, params=None):
       tps = int(params[2].split("=")[1])
     if len(params)>3 and "iters" in params[3]:
       iters = int(params[3].split("=")[1])
+    if len(params)>4 and "client" in params[4]:
+      clientname = params[4].split("=")[1]
     addrs = [cnxn.getnewaddress() for i in range(0,25)]
     while 1:
       try:
-        spamTx(cnxn, MAX_TXN, addrs, tps, iters, amt, False)
+        spamTx(cnxn, MAX_TXN, addrs, tps, iters, clientname, amt, False)
       except rpc.JSONRPCError as e:
         print ("Out of addresses.  Sleeping")
         time.sleep(60)
@@ -236,7 +243,7 @@ def generate(amt=1,cnxn=None):
   if cnxn is None: cnxn = bu
   cnxn._call("generate",amt)
 
-def spamTx(bu, numTx, addrp, tps, iters, amt = None,gen=False, mempoolTarget=None):
+def spamTx(bu, numTx, addrp, tps, iters, clientname, amt = None, gen=False, mempoolTarget=None):
   addr = addrp
   #print(">>>> Len off Address : ", len(addr))
   print("SPAM")
@@ -305,13 +312,27 @@ def spamTx(bu, numTx, addrp, tps, iters, amt = None,gen=False, mempoolTarget=Non
 
         if iters is not None and runs == iters:
           runs = 0
-          print("\n>>> End of Mesaurement")
+          print("\n>>> End of Measurement\n")
           average = round( sum(pps_avg)/len(pps_avg) )
-          print(">>> pps_min = ", round( sum(pps_min)/len(pps_min)))
-          print(">>> pps_avg = ", round( sum(pps_avg)/len(pps_avg)))
-          print(">>> pps_max = ", round( sum(pps_max)/len(pps_max)))
+          min_ave = sum(pps_min)/len(pps_min)
+          ave_ave = sum(pps_avg)/len(pps_avg)
+          max_ave = sum(pps_max)/len(pps_max)
+          print(">>> pps_min = ", min_ave )
+          print(">>> pps_avg = ", ave_ave )
+          print(">>> pps_max = ", max_ave )
           time.sleep(3)
-          #assert(average > TARGET_PPS)
+          # capture stat to csv file
+          file_exists = os.path.isfile(PPS_STATS_FILE)
+          with open(PPS_STATS_FILE, 'a') as fh:
+              if not file_exists:
+                  fh.write('%s, %s, %s, %s, %s, %s, %s \n' % ( "TimeStamp", "PPS_Min", "PPS_Ave", "PPS_Max",
+                  "Version", "Proto Version", "Client Name") )
+              getinfo= cnxn.getinfo()
+              fh.write('%s, %0.3f, %0.3f, %0.3f, %s, %s, %s \n' % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+              min_ave, ave_ave, max_ave,
+              str(getinfo['version']),
+              str(getinfo['protocolversion']),
+              clientname ) )
           if tps is not None:
             assert(average > tps)
           print("Test passed!!!")
@@ -484,6 +505,9 @@ if __name__ == "__main__":
       print("                                                      ")
       print(' To set number of iterations (in 10mins) for "spam" command, use "iters=value" option to overwrite default value of 3')
       print("      example 6:  ./txnTest_remote.py regtest spam 1234567 localhost tps=5 iters=2")
+      print("                                                      ")
+      print(' To log result to CSV file, use "client=ABC_0.17.1" option at the end specifying client and version used')
+      print("      example 7:  ./txnTest_remote.py regtest spam 1234567 localhost tps=5 iters=2 client=ABC_0.17.1")
       sys.exit(1)
     if sys.argv[idx] == "testnet":
       bitcoin.SelectParams('testnet')
