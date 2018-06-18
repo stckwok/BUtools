@@ -271,7 +271,6 @@ def spamTx(bu, numTx, addrp, tps, iters, clientname, amt = None, gen=False, memp
       current_pay_sec = 256.0/interval
       print ("issued 256 payments in %f seconds.  %f payments/sec" % (interval, current_pay_sec))
       payments_per_sec.append(current_pay_sec)
-      #TODO: write to CSV
       if mempoolTarget:  # if the mempool is too big, wait for it to be reduced
         while True:
           mempoolData=bu._call("getmempoolinfo")
@@ -312,8 +311,7 @@ def spamTx(bu, numTx, addrp, tps, iters, clientname, amt = None, gen=False, memp
 
         if iters is not None and runs == iters:
           runs = 0
-          print("\n>>> End of Measurement\n")
-          average = round( sum(pps_avg)/len(pps_avg) )
+          print("\n>>> End of Measurement")
           min_ave = sum(pps_min)/len(pps_min)
           ave_ave = sum(pps_avg)/len(pps_avg)
           max_ave = sum(pps_max)/len(pps_max)
@@ -325,16 +323,17 @@ def spamTx(bu, numTx, addrp, tps, iters, clientname, amt = None, gen=False, memp
           file_exists = os.path.isfile(PPS_STATS_FILE)
           with open(PPS_STATS_FILE, 'a') as fh:
               if not file_exists:
-                  fh.write('%s, %s, %s, %s, %s, %s, %s \n' % ( "TimeStamp", "PPS_Min", "PPS_Ave", "PPS_Max",
-                  "Version", "Proto Version", "Client Name") )
+                  fh.write('%-20s, %-6s, %-6s, %-6s, %-7s, %-12s, %-3s, %-5s\n' % ( "Time Stamps", "PPS_Min", "PPS_Ave", "PPS_Max",
+                  "Version", "Client_Name", "Exp.PPS", "Result") )
               getinfo= cnxn.getinfo()
-              fh.write('%s, %0.3f, %0.3f, %0.3f, %s, %s, %s \n' % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+              result = "Fail"
+              if (ave_ave > tps): result = "Pass"
+              fh.write('%-20s, %0.5f, %0.5f, %0.5f, %-7s, %-12s, %-7d, %-5s\n' % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
               min_ave, ave_ave, max_ave,
               str(getinfo['version']),
-              str(getinfo['protocolversion']),
-              clientname ) )
+              clientname, tps, result) )
           if tps is not None:
-            assert(average > tps)
+            assert(ave_ave > tps)
           print("Test passed!!!")
           sys.exit(0)
     try:
@@ -344,7 +343,6 @@ def spamTx(bu, numTx, addrp, tps, iters, clientname, amt = None, gen=False, memp
         else:
             # with timeit decorator on each txn
             send_to_address(bu, addr, amt)
-            # TODO: can also write to CSV file (required for finest measurement)
     except rpc.JSONRPCError as e:
       if "Fee is larger" in str(e) and randAmt:
         pass
