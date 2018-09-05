@@ -247,7 +247,8 @@ class BaseProxy2(object):
             print("<1> platform = ", platform.system() )
             if btc_conf_file is None:
                 # GCP changes from ansible-playbook task
-                btc_conf_file = os.path.expanduser('/var/lib/bitcoind/.bitcoin')
+                #btc_conf_file = os.path.expanduser('/var/lib/bitcoind/.bitcoin')
+                btc_conf_file = os.path.expanduser('/etc')
                 btc_conf_file = os.path.join(btc_conf_file, 'bitcoin.conf')
                 print("<2> btc_conf_file = ", btc_conf_file )
             # Extract contents of bitcoin.conf to build service_url
